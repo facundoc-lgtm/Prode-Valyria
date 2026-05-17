@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #091620;
+  --bg-card: #132130;
+  --bg-input: #0c1c28;
+  --blue: #4d74ef;
+  --blue-hover: #3d62d8;
+  --teal: #2ec4b6;
+  --gold: #f0c040;
+  --text: #ffffff;
+  --text-muted: #6b8fa6;
+  --border: #1e3348;
+  --border-light: #243f55;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-family: system-ui, -apple-system, sans-serif;
+  margin: 0;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+}
+
+.btn-blue {
+  background: var(--blue);
+  color: white;
+  font-weight: 700;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: none;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: background 0.15s;
+  width: 100%;
+  font-size: 0.95rem;
+}
+.btn-blue:hover:not(:disabled) { background: var(--blue-hover); }
+.btn-blue:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-dark {
+  background: #1a2f40;
+  color: var(--text-muted);
+  font-weight: 500;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s;
+  width: 100%;
+  font-size: 0.9rem;
+}
+.btn-dark:hover { background: #1f3a50; color: white; }
+
+.input-field {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  width: 100%;
+  color: white;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.input-field:focus { border-color: var(--blue); }
+.input-field::placeholder { color: #3a5a70; }
+
+.score-box {
+  background: var(--bg-input);
+  border: 1px solid var(--border-light);
+  border-radius: 0.625rem;
+  width: 3rem;
+  height: 3rem;
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: white;
+  outline: none;
+  -moz-appearance: textfield;
+}
+.score-box::-webkit-inner-spin-button,
+.score-box::-webkit-outer-spin-button { -webkit-appearance: none; }
+.score-box:focus { border-color: var(--blue); }
+
+.match-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  background: #0f2030;
+  border: 1px solid var(--border);
+}
+
+.player-chip {
+  padding: 0.4rem 1rem;
+  border-radius: 0.625rem;
+  background: #1a2f40;
+  border: 1px solid var(--border-light);
+  color: #a0bdd0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.player-chip:hover { background: #1f3a4e; color: white; border-color: var(--blue); }
+.player-chip.selected { background: #1a3060; border-color: var(--blue); color: white; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a4050; border-radius: 4px; }
