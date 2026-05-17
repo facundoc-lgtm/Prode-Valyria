@@ -1,21 +1,31 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { signIn, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 
-type Mode = 'home' | 'create' | 'join-new' | 'join-existing';
+const BALLS = [
+  { top: '8%',  left: '5%',  size: 28, opacity: 0.18 },
+  { top: '15%', left: '85%', size: 22, opacity: 0.14 },
+  { top: '30%', left: '92%', size: 18, opacity: 0.12 },
+  { top: '55%', left: '3%',  size: 24, opacity: 0.16 },
+  { top: '70%', left: '88%', size: 20, opacity: 0.13 },
+  { top: '82%', left: '15%', size: 16, opacity: 0.11 },
+  { top: '90%', left: '70%', size: 22, opacity: 0.14 },
+  { top: '42%', left: '96%', size: 15, opacity: 0.10 },
+  { top: '5%',  left: '50%', size: 19, opacity: 0.12 },
+  { top: '65%', left: '50%', size: 17, opacity: 0.09 },
+];
 
-export default function Home() {
+type Mode = 'home' | 'create';
+
+export default function HomePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('home');
+  const [codeInput, setCodeInput] = useState('');
+  const [createForm, setCreateForm] = useState({ roomName: '', username: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const [createForm, setCreateForm] = useState({ roomName: '', username: '', password: '' });
-  const [joinNewForm, setJoinNewForm] = useState({ roomCode: '', username: '', password: '' });
-  const [loginForm, setLoginForm] = useState({ roomCode: '', username: '', password: '' });
 
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.roomCode) {
@@ -26,9 +36,16 @@ export default function Home() {
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-amber-400 text-xl animate-pulse">Cargando...</div>
+        <div className="text-2xl animate-pulse" style={{ color: 'var(--teal)' }}>⚽</div>
       </div>
     );
+  }
+
+  async function handleEnterRoom(e: React.FormEvent) {
+    e.preventDefault();
+    const code = codeInput.trim().toUpperCase();
+    if (!code) return;
+    router.push(`/room/${code}`);
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -42,7 +59,7 @@ export default function Home() {
         body: JSON.stringify(createForm),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
+      if (!res.ok) { setError(data.error); setLoading(false); return; }
 
       const result = await signIn('credentials', {
         username: createForm.username,
@@ -50,195 +67,160 @@ export default function Home() {
         roomCode: data.code,
         redirect: false,
       });
-      if (result?.error) { setError('Error al iniciar sesión automáticamente'); return; }
+      if (result?.error) { setError('Error al iniciar sesión'); setLoading(false); return; }
       router.push(`/room/${data.code}`);
     } catch {
       setError('Error de conexión');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleJoinNew(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const res = await fetch('/api/rooms/join', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...joinNewForm, roomCode: joinNewForm.roomCode.toUpperCase() }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
-
-      const result = await signIn('credentials', {
-        username: joinNewForm.username,
-        password: joinNewForm.password,
-        roomCode: joinNewForm.roomCode.toUpperCase(),
-        redirect: false,
-      });
-      if (result?.error) { setError('Error al iniciar sesión'); return; }
-      router.push(`/room/${joinNewForm.roomCode.toUpperCase()}`);
-    } catch {
-      setError('Error de conexión');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const result = await signIn('credentials', {
-        username: loginForm.username,
-        password: loginForm.password,
-        roomCode: loginForm.roomCode.toUpperCase(),
-        redirect: false,
-      });
-      if (result?.error) { setError('Usuario, contraseña o código incorrecto'); return; }
-      router.push(`/room/${loginForm.roomCode.toUpperCase()}`);
-    } catch {
-      setError('Error de conexión');
-    } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12">
-      {/* Header */}
-      <div className="text-center mb-10">
-        <div className="text-6xl mb-3">⚽</div>
-        <h1 className="text-4xl sm:text-5xl font-bold text-amber-400 mb-2">Prode Valyria</h1>
-        <p className="text-slate-400 text-lg">Mundial 2026 · Jugá con tus amigos</p>
+    <div
+      className="relative min-h-screen flex flex-col items-center justify-center px-4 py-8 overflow-hidden"
+      style={{ background: 'linear-gradient(160deg, #07131a 0%, #0d2133 50%, #07131a 100%)' }}
+    >
+      {/* Big "26" background decoration */}
+      <div
+        className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden"
+        aria-hidden
+      >
+        <span
+          className="font-black leading-none"
+          style={{
+            fontSize: 'min(80vw, 80vh)',
+            color: 'rgba(15, 45, 65, 0.55)',
+            letterSpacing: '-0.05em',
+          }}
+        >
+          26
+        </span>
       </div>
 
-      {/* Main card */}
-      <div className="w-full max-w-md">
+      {/* Floating soccer balls */}
+      {BALLS.map((b, i) => (
+        <div
+          key={i}
+          className="absolute pointer-events-none select-none"
+          style={{ top: b.top, left: b.left, fontSize: b.size, opacity: b.opacity }}
+          aria-hidden
+        >
+          ⚽
+        </div>
+      ))}
+
+      {/* Content */}
+      <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
+        {/* Logo */}
+        <div
+          className="mb-5 px-6 py-5 rounded-2xl flex flex-col items-center"
+          style={{ background: '#0a0e15', border: '1px solid #1a2a38' }}
+        >
+          <div className="text-5xl font-black tracking-tight text-white leading-none">
+            <span style={{ color: 'var(--teal)' }}>2</span>
+            <span>6</span>
+          </div>
+          <div className="text-xs font-bold tracking-[0.3em] mt-1" style={{ color: 'var(--text-muted)' }}>
+            FIFA
+          </div>
+        </div>
+
+        <p className="text-sm font-bold tracking-[0.25em] mb-6" style={{ color: 'var(--teal)' }}>
+          ¡PREDICÍ Y GANÁ!
+        </p>
+
         {mode === 'home' && (
-          <div className="card p-8 flex flex-col gap-4">
-            <h2 className="text-xl font-semibold text-slate-200 text-center mb-2">¿Qué querés hacer?</h2>
-            <button onClick={() => { setMode('create'); setError(''); }} className="btn-primary text-center py-3 text-base rounded-xl">
-              🏟️ Crear una sala nueva
-            </button>
-            <button onClick={() => { setMode('join-new'); setError(''); }} className="btn-secondary text-center py-3 text-base rounded-xl">
-              👤 Unirme a una sala (nuevo usuario)
-            </button>
-            <button onClick={() => { setMode('join-existing'); setError(''); }} className="btn-secondary text-center py-3 text-base rounded-xl">
-              🔑 Ya tengo cuenta en una sala
+          <div className="w-full card p-6 flex flex-col gap-3">
+            <form onSubmit={handleEnterRoom} className="flex flex-col gap-3">
+              <div>
+                <label className="text-xs font-bold tracking-widest mb-2 block" style={{ color: 'var(--text-muted)' }}>
+                  CÓDIGO DE SALA
+                </label>
+                <input
+                  className="input-field font-mono uppercase tracking-[0.3em] text-lg text-center"
+                  placeholder="ej: familia"
+                  value={codeInput}
+                  maxLength={6}
+                  onChange={e => { setCodeInput(e.target.value.toUpperCase()); setError(''); }}
+                  autoFocus
+                />
+              </div>
+              {error && (
+                <p className="text-sm text-red-400 bg-red-900/20 rounded-lg px-3 py-2">{error}</p>
+              )}
+              <button type="submit" className="btn-blue text-base mt-1">
+                ENTRAR A LA SALA →
+              </button>
+            </form>
+            <button onClick={() => { setMode('create'); setError(''); }} className="btn-dark text-sm">
+              Crear sala nueva
             </button>
           </div>
         )}
 
         {mode === 'create' && (
-          <div className="card p-8">
-            <button onClick={() => { setMode('home'); setError(''); }} className="text-slate-400 hover:text-slate-200 text-sm mb-4 flex items-center gap-1">
-              ← Volver
-            </button>
-            <h2 className="text-xl font-semibold text-amber-400 mb-6">Crear sala nueva</h2>
-            <form onSubmit={handleCreate} className="flex flex-col gap-4">
+          <div className="w-full card p-6">
+            <h2 className="text-sm font-bold tracking-widest mb-5" style={{ color: 'var(--teal)' }}>
+              CREAR SALA NUEVA
+            </h2>
+            <form onSubmit={handleCreate} className="flex flex-col gap-3">
               <div>
-                <label className="text-sm text-slate-400 mb-1 block">Nombre de la sala</label>
-                <input className="input" placeholder="Ej: Los Pibes del Trabajo" value={createForm.roomName}
-                  onChange={e => setCreateForm(f => ({ ...f, roomName: e.target.value }))} required />
+                <label className="text-xs font-bold tracking-widest mb-2 block" style={{ color: 'var(--text-muted)' }}>
+                  NOMBRE DE LA SALA
+                </label>
+                <input
+                  className="input-field"
+                  placeholder="ej: Los Pibes"
+                  value={createForm.roomName}
+                  onChange={e => setCreateForm(f => ({ ...f, roomName: e.target.value }))}
+                  required
+                />
               </div>
               <div>
-                <label className="text-sm text-slate-400 mb-1 block">Tu nombre de usuario</label>
-                <input className="input" placeholder="Ej: Facundo" value={createForm.username}
-                  onChange={e => setCreateForm(f => ({ ...f, username: e.target.value }))} required minLength={2} />
+                <label className="text-xs font-bold tracking-widest mb-2 block" style={{ color: 'var(--text-muted)' }}>
+                  TU NOMBRE
+                </label>
+                <input
+                  className="input-field"
+                  placeholder="ej: Facu"
+                  value={createForm.username}
+                  onChange={e => setCreateForm(f => ({ ...f, username: e.target.value }))}
+                  required minLength={2}
+                />
               </div>
               <div>
-                <label className="text-sm text-slate-400 mb-1 block">Contraseña</label>
-                <input className="input" type="password" placeholder="Mínimo 4 caracteres" value={createForm.password}
-                  onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))} required minLength={4} />
+                <label className="text-xs font-bold tracking-widest mb-2 block" style={{ color: 'var(--text-muted)' }}>
+                  ELEGÍ UN CÓDIGO PERSONAL
+                </label>
+                <input
+                  className="input-field"
+                  placeholder="ej: 1234"
+                  value={createForm.password}
+                  onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))}
+                  required minLength={4}
+                />
               </div>
-              {error && <p className="text-red-400 text-sm bg-red-900/20 rounded-lg px-3 py-2">{error}</p>}
-              <button type="submit" disabled={loading} className="btn-primary py-3 mt-2 rounded-xl">
-                {loading ? 'Creando sala...' : 'Crear sala ✨'}
+              {error && (
+                <p className="text-sm text-red-400 bg-red-900/20 rounded-lg px-3 py-2">{error}</p>
+              )}
+              <button type="submit" disabled={loading} className="btn-blue text-sm mt-1">
+                {loading ? 'Creando sala...' : 'CREAR SALA →'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setMode('home'); setError(''); }}
+                className="btn-dark text-sm"
+              >
+                ← Volver
               </button>
             </form>
           </div>
         )}
 
-        {mode === 'join-new' && (
-          <div className="card p-8">
-            <button onClick={() => { setMode('home'); setError(''); }} className="text-slate-400 hover:text-slate-200 text-sm mb-4 flex items-center gap-1">
-              ← Volver
-            </button>
-            <h2 className="text-xl font-semibold text-amber-400 mb-6">Unirme a una sala</h2>
-            <form onSubmit={handleJoinNew} className="flex flex-col gap-4">
-              <div>
-                <label className="text-sm text-slate-400 mb-1 block">Código de sala</label>
-                <input className="input font-mono uppercase tracking-widest text-lg" placeholder="Ej: ABC123"
-                  value={joinNewForm.roomCode} maxLength={6}
-                  onChange={e => setJoinNewForm(f => ({ ...f, roomCode: e.target.value.toUpperCase() }))} required />
-              </div>
-              <div>
-                <label className="text-sm text-slate-400 mb-1 block">Elegí tu nombre de usuario</label>
-                <input className="input" placeholder="Ej: María" value={joinNewForm.username}
-                  onChange={e => setJoinNewForm(f => ({ ...f, username: e.target.value }))} required minLength={2} />
-              </div>
-              <div>
-                <label className="text-sm text-slate-400 mb-1 block">Contraseña</label>
-                <input className="input" type="password" placeholder="Mínimo 4 caracteres" value={joinNewForm.password}
-                  onChange={e => setJoinNewForm(f => ({ ...f, password: e.target.value }))} required minLength={4} />
-              </div>
-              {error && <p className="text-red-400 text-sm bg-red-900/20 rounded-lg px-3 py-2">{error}</p>}
-              <button type="submit" disabled={loading} className="btn-primary py-3 mt-2 rounded-xl">
-                {loading ? 'Uniéndome...' : 'Unirme a la sala'}
-              </button>
-            </form>
-            <p className="text-center text-slate-500 text-sm mt-4">
-              ¿Ya tenés cuenta?{' '}
-              <button onClick={() => { setMode('join-existing'); setError(''); }} className="text-amber-400 hover:underline">
-                Iniciá sesión
-              </button>
-            </p>
-          </div>
-        )}
-
-        {mode === 'join-existing' && (
-          <div className="card p-8">
-            <button onClick={() => { setMode('home'); setError(''); }} className="text-slate-400 hover:text-slate-200 text-sm mb-4 flex items-center gap-1">
-              ← Volver
-            </button>
-            <h2 className="text-xl font-semibold text-amber-400 mb-6">Iniciar sesión</h2>
-            <form onSubmit={handleLogin} className="flex flex-col gap-4">
-              <div>
-                <label className="text-sm text-slate-400 mb-1 block">Código de sala</label>
-                <input className="input font-mono uppercase tracking-widest text-lg" placeholder="Ej: ABC123"
-                  value={loginForm.roomCode} maxLength={6}
-                  onChange={e => setLoginForm(f => ({ ...f, roomCode: e.target.value.toUpperCase() }))} required />
-              </div>
-              <div>
-                <label className="text-sm text-slate-400 mb-1 block">Tu nombre de usuario</label>
-                <input className="input" placeholder="Ej: Facundo" value={loginForm.username}
-                  onChange={e => setLoginForm(f => ({ ...f, username: e.target.value }))} required />
-              </div>
-              <div>
-                <label className="text-sm text-slate-400 mb-1 block">Contraseña</label>
-                <input className="input" type="password" placeholder="" value={loginForm.password}
-                  onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))} required />
-              </div>
-              {error && <p className="text-red-400 text-sm bg-red-900/20 rounded-lg px-3 py-2">{error}</p>}
-              <button type="submit" disabled={loading} className="btn-primary py-3 mt-2 rounded-xl">
-                {loading ? 'Iniciando sesión...' : 'Entrar a la sala'}
-              </button>
-            </form>
-            <p className="text-center text-slate-500 text-sm mt-4">
-              ¿Primera vez en esta sala?{' '}
-              <button onClick={() => { setMode('join-new'); setError(''); }} className="text-amber-400 hover:underline">
-                Registrate
-              </button>
-            </p>
-          </div>
-        )}
+        <p className="text-xs mt-6" style={{ color: 'var(--text-muted)', opacity: 0.6 }}>
+          Mundial USA · Canadá · México 2026
+        </p>
       </div>
-
-      <p className="text-slate-600 text-sm mt-8">Mundial USA · Canadá · México 2026</p>
     </div>
   );
 }

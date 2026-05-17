@@ -80,16 +80,16 @@ if (matchCount === 0) {
   `);
 
   const groups: { name: string; teams: string[] }[] = [
-    { name: 'A', teams: ['Estados Unidos', 'Uzbekistán', 'Marruecos', 'Escocia'] },
-    { name: 'B', teams: ['México', 'Ecuador', 'Arabia Saudita', 'Argelia'] },
-    { name: 'C', teams: ['Canadá', 'Uruguay', 'Japón', 'Sudáfrica'] },
-    { name: 'D', teams: ['España', 'Panamá', 'Australia', 'Nigeria'] },
-    { name: 'E', teams: ['Francia', 'Honduras', 'Corea del Sur', 'Ghana'] },
-    { name: 'F', teams: ['Alemania', 'Jamaica', 'Irán', 'Camerún'] },
-    { name: 'G', teams: ['Portugal', 'Argentina', 'Qatar', 'Senegal'] },
-    { name: 'H', teams: ['Inglaterra', 'Colombia', 'Irak', 'Costa de Marfil'] },
-    { name: 'I', teams: ['Países Bajos', 'Brasil', 'Turquía', 'Egipto'] },
-    { name: 'J', teams: ['Bélgica', 'Paraguay', 'Croacia', 'Nueva Zelanda'] },
+    { name: 'A', teams: ['México', 'Corea del Sur', 'Sudáfrica', 'Chequia'] },
+    { name: 'B', teams: ['Estados Unidos', 'Panamá', 'Uruguay', 'Bolivia'] },
+    { name: 'C', teams: ['Canadá', 'Honduras', 'Brasil', 'Marruecos'] },
+    { name: 'D', teams: ['España', 'Ecuador', 'Japón', 'Ghana'] },
+    { name: 'E', teams: ['Francia', 'Jamaica', 'Arabia Saudita', 'Nigeria'] },
+    { name: 'F', teams: ['Alemania', 'Costa Rica', 'Australia', 'Costa de Marfil'] },
+    { name: 'G', teams: ['Portugal', 'Argentina', 'Irán', 'Senegal'] },
+    { name: 'H', teams: ['Inglaterra', 'Colombia', 'Irak', 'Argelia'] },
+    { name: 'I', teams: ['Países Bajos', 'Venezuela', 'Turquía', 'Egipto'] },
+    { name: 'J', teams: ['Bélgica', 'Paraguay', 'Croacia', 'Uzbekistán'] },
     { name: 'K', teams: ['Italia', 'Serbia', 'Hungría', 'Playoff A'] },
     { name: 'L', teams: ['Suiza', 'Dinamarca', 'Austria', 'Playoff B'] },
   ];
@@ -286,6 +286,8 @@ export interface LeaderboardEntry {
   total_points: number;
   predictions_count: number;
   finished_count: number;
+  exact_count: number;
+  result_count: number;
 }
 
 export function getLeaderboard(roomId: number): LeaderboardEntry[] {
@@ -293,15 +295,21 @@ export function getLeaderboard(roomId: number): LeaderboardEntry[] {
     SELECT
       u.id   AS user_id,
       u.username,
-      COALESCE(SUM(p.points), 0) AS total_points,
-      COUNT(p.id)                AS predictions_count,
-      COUNT(CASE WHEN p.points IS NOT NULL THEN 1 END) AS finished_count
+      COALESCE(SUM(p.points), 0)                       AS total_points,
+      COUNT(p.id)                                       AS predictions_count,
+      COUNT(CASE WHEN p.points IS NOT NULL THEN 1 END) AS finished_count,
+      COUNT(CASE WHEN p.points = 3 THEN 1 END)         AS exact_count,
+      COUNT(CASE WHEN p.points = 1 THEN 1 END)         AS result_count
     FROM users u
     LEFT JOIN predictions p ON p.user_id = u.id
     WHERE u.room_id = ?
     GROUP BY u.id, u.username
     ORDER BY total_points DESC, u.username ASC
   `).all(roomId) as LeaderboardEntry[];
+}
+
+export function getAdminUser(roomId: number): User | undefined {
+  return db.prepare('SELECT * FROM users WHERE room_id = ? AND is_admin = 1 LIMIT 1').get(roomId) as User | undefined;
 }
 
 export default db;

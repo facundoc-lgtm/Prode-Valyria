@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signIn } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
-import Link from 'next/link';
+import { getFlag } from '@/lib/flags';
 
 interface Match {
   id: number;
@@ -18,177 +18,147 @@ interface Match {
 }
 
 const STAGE_LABELS: Record<string, string> = {
-  group: 'Fase de Grupos',
-  r32: 'Ronda de 32',
-  r16: 'Octavos de Final',
-  qf: 'Cuartos de Final',
-  sf: 'Semifinales',
-  '3rd': 'Tercer Puesto',
-  final: 'Final',
+  group: 'Fase de Grupos', r32: 'Ronda de 32', r16: 'Octavos',
+  qf: 'Cuartos', sf: 'Semifinales', '3rd': 'Tercer Puesto', final: 'Final',
 };
 
-function formatDate(isoDate: string): string {
-  const date = new Date(isoDate);
-  return date.toLocaleDateString('es-AR', {
-    day: 'numeric', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
+function fmtDate(iso: string) {
+  const d = new Date(iso);
+  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  return `${d.getUTCDate()} ${months[d.getUTCMonth()]}`;
 }
 
-type Tab = 'results' | 'teams';
+function ResultRow({ match, onSave }: { match: Match; onSave: (id: number, h: number, a: number) => Promise<void> }) {
+  const [h, setH] = useState(match.home_score != null ? String(match.home_score) : '');
+  const [a, setA] = useState(match.away_score != null ? String(match.away_score) : '');
+  const [status, setStatus] = useState<'idle'|'saving'|'saved'|'error'>('idle');
+  const [err, setErr] = useState('');
 
-function ResultsRow({ match, onSave }: {
-  match: Match;
-  onSave: (matchId: number, home: number, away: number) => Promise<void>;
-}) {
-  const [home, setHome] = useState(match.home_score != null ? String(match.home_score) : '');
-  const [away, setAway] = useState(match.away_score != null ? String(match.away_score) : '');
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState('');
-
-  async function handleSave() {
-    const h = parseInt(home, 10);
-    const a = parseInt(away, 10);
-    if (isNaN(h) || isNaN(a) || h < 0 || a < 0) {
-      setError('Ingresá valores válidos (0 o más)');
-      return;
-    }
-    setSaving(true);
-    setError('');
+  async function save() {
+    const hi = parseInt(h, 10), ai = parseInt(a, 10);
+    if (isNaN(hi) || isNaN(ai) || hi < 0 || ai < 0) { setErr('Valores inválidos'); return; }
+    setStatus('saving'); setErr('');
     try {
-      await onSave(match.id, h, a);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error');
-    } finally {
-      setSaving(false);
+      await onSave(match.id, hi, ai);
+      setStatus('saved');
+      setTimeout(() => setStatus('idle'), 3000);
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : 'Error');
+      setStatus('error');
     }
   }
 
   return (
-    <div className={`rounded-xl border p-4 ${match.is_finished ? 'border-green-700/40 bg-green-900/10' : 'border-slate-700 bg-slate-800'}`}>
+    <div className="px-3 py-3 rounded-xl mb-2" style={{
+      background: match.is_finished ? 'rgba(46,196,182,0.07)' : '#0f2030',
+      border: `1px solid ${match.is_finished ? 'rgba(46,196,182,0.25)' : 'var(--border)'}`,
+    }}>
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs text-slate-500">{formatDate(match.match_date)}</span>
-        {match.group_name && (
-          <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full">
-            Grupo {match.group_name}
-          </span>
-        )}
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          {fmtDate(match.match_date)}
+          {match.group_name ? ` · Gr.${match.group_name}` : ` · ${STAGE_LABELS[match.stage]}`}
+        </span>
         {match.is_finished ? (
-          <span className="text-xs bg-green-600/30 text-green-400 px-2 py-0.5 rounded-full">✓ Cargado</span>
+          <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: 'rgba(46,196,182,0.2)', color: 'var(--teal)' }}>✓ Cargado</span>
         ) : null}
       </div>
-
-      <div className="flex items-center gap-3">
-        <div className="flex-1 text-right">
-          <p className="font-semibold text-slate-100 text-sm">{match.home_team}</p>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 flex items-center justify-end gap-1.5 min-w-0">
+          <span className="text-sm font-semibold text-white truncate text-right">{match.home_team}</span>
+          <span>{getFlag(match.home_team)}</span>
         </div>
-
-        <div className="flex items-center gap-1.5 shrink-0">
-          <input
-            type="number" min="0" max="99"
-            className="score-input"
-            value={home}
-            onChange={e => setHome(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
-            placeholder="0"
-          />
-          <span className="text-slate-500 font-bold">-</span>
-          <input
-            type="number" min="0" max="99"
-            className="score-input"
-            value={away}
-            onChange={e => setAway(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
-            placeholder="0"
-          />
+        <div className="flex items-center gap-1 shrink-0">
+          <input type="number" className="score-box" value={h} min={0} max={99}
+            onChange={e => setH(e.target.value.replace(/\D/g,'').slice(0,2))} placeholder="0" />
+          <span className="font-bold" style={{ color: 'var(--text-muted)' }}>-</span>
+          <input type="number" className="score-box" value={a} min={0} max={99}
+            onChange={e => setA(e.target.value.replace(/\D/g,'').slice(0,2))} placeholder="0" />
         </div>
-
-        <div className="flex-1">
-          <p className="font-semibold text-slate-100 text-sm">{match.away_team}</p>
+        <div className="flex-1 flex items-center gap-1.5 min-w-0">
+          <span>{getFlag(match.away_team)}</span>
+          <span className="text-sm font-semibold text-white truncate">{match.away_team}</span>
         </div>
       </div>
-
-      <div className="mt-3 flex items-center justify-between">
-        <div>
-          {error && <span className="text-red-400 text-xs">{error}</span>}
-          {saved && <span className="text-green-400 text-xs">✓ Resultado guardado y puntos calculados</span>}
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="btn-primary text-sm px-4 py-1.5 disabled:opacity-50"
-        >
-          {saving ? 'Guardando...' : match.is_finished ? 'Actualizar resultado' : 'Confirmar resultado'}
+      <div className="flex items-center justify-between mt-2">
+        <span className="text-xs">
+          {err && <span className="text-red-400">{err}</span>}
+          {status === 'saved' && <span className="text-green-400">✓ Puntos calculados</span>}
+        </span>
+        <button onClick={save} disabled={status === 'saving'} className="btn-blue text-xs px-4 py-1.5 rounded-lg disabled:opacity-50">
+          {status === 'saving' ? '...' : match.is_finished ? 'Actualizar' : 'Confirmar'}
         </button>
       </div>
     </div>
   );
 }
 
-function TeamsRow({ match, onSave }: {
-  match: Match;
-  onSave: (matchId: number, home: string, away: string) => Promise<void>;
-}) {
-  const [home, setHome] = useState(match.home_team);
-  const [away, setAway] = useState(match.away_team);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState('');
+function TeamRow({ match, onSave }: { match: Match; onSave: (id: number, h: string, a: string) => Promise<void> }) {
+  const [h, setH] = useState(match.home_team);
+  const [a, setA] = useState(match.away_team);
+  const [status, setStatus] = useState<'idle'|'saving'|'saved'>('idle');
+  const dirty = h !== match.home_team || a !== match.away_team;
 
-  async function handleSave() {
-    if (!home.trim() || !away.trim()) { setError('Ingresá ambos equipos'); return; }
-    setSaving(true);
-    setError('');
-    try {
-      await onSave(match.id, home.trim(), away.trim());
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error');
-    } finally {
-      setSaving(false);
-    }
+  async function save() {
+    if (!h.trim() || !a.trim()) return;
+    setStatus('saving');
+    await onSave(match.id, h.trim(), a.trim());
+    setStatus('saved');
+    setTimeout(() => setStatus('idle'), 2000);
   }
 
-  const isDirty = home !== match.home_team || away !== match.away_team;
+  return (
+    <div className="px-3 py-3 rounded-xl mb-2" style={{ background: '#0f2030', border: '1px solid var(--border)' }}>
+      <div className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
+        {fmtDate(match.match_date)} · {STAGE_LABELS[match.stage] ?? match.stage}
+        {match.group_name ? ` · Gr.${match.group_name}` : ''}
+      </div>
+      <div className="flex items-center gap-2">
+        <input className="input-field flex-1 text-sm py-2" value={h} onChange={e => { setH(e.target.value); setStatus('idle'); }} placeholder="Equipo local" />
+        <span className="text-sm shrink-0" style={{ color: 'var(--text-muted)' }}>vs</span>
+        <input className="input-field flex-1 text-sm py-2" value={a} onChange={e => { setA(e.target.value); setStatus('idle'); }} placeholder="Equipo visitante" />
+        <button onClick={save} disabled={!dirty || status === 'saving'} className="btn-blue text-xs px-3 py-2 rounded-lg shrink-0 disabled:opacity-40">
+          {status === 'saved' ? '✓' : 'OK'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Admin login form (for non-admin users)
+function AdminLoginForm({ code }: { code: string }) {
+  const router = useRouter();
+  const [name, setName] = useState('');
+  const [pass, setPass] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true); setErr('');
+    const result = await signIn('credentials', { username: name, password: pass, roomCode: code, redirect: false });
+    if (result?.error) { setErr('Credenciales incorrectas'); setLoading(false); return; }
+    router.refresh();
+    window.location.reload();
+  }
 
   return (
-    <div className="rounded-xl border border-slate-700 bg-slate-800 p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-xs text-slate-500">{formatDate(match.match_date)}</span>
-        <span className="text-xs font-medium text-slate-400">
-          {STAGE_LABELS[match.stage] ?? match.stage}
-          {match.group_name ? ` · Grupo ${match.group_name}` : ''}
-        </span>
-      </div>
-      <div className="flex items-center gap-3">
-        <input
-          className="input flex-1 text-sm"
-          value={home}
-          onChange={e => { setHome(e.target.value); setSaved(false); }}
-          placeholder="Equipo local"
-        />
-        <span className="text-slate-500 font-bold shrink-0">vs</span>
-        <input
-          className="input flex-1 text-sm"
-          value={away}
-          onChange={e => { setAway(e.target.value); setSaved(false); }}
-          placeholder="Equipo visitante"
-        />
-      </div>
-      <div className="mt-3 flex items-center justify-between">
-        <div>
-          {error && <span className="text-red-400 text-xs">{error}</span>}
-          {saved && <span className="text-green-400 text-xs">✓ Actualizado</span>}
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={saving || !isDirty}
-          className="btn-secondary text-sm px-4 py-1.5 disabled:opacity-40"
-        >
-          {saving ? 'Guardando...' : 'Actualizar'}
-        </button>
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'linear-gradient(160deg, #07131a 0%, #0d2133 50%, #07131a 100%)' }}>
+      <div className="w-full max-w-sm card p-6">
+        <h2 className="text-lg font-black tracking-widest mb-1 text-red-400">ACCESO ADMIN</h2>
+        <p className="text-xs mb-5" style={{ color: 'var(--text-muted)' }}>Ingresá con las credenciales del administrador</p>
+        <form onSubmit={handleLogin} className="flex flex-col gap-3">
+          <div>
+            <label className="text-xs font-bold tracking-widest mb-2 block" style={{ color: 'var(--text-muted)' }}>USUARIO ADMIN</label>
+            <input className="input-field" value={name} onChange={e => setName(e.target.value)} placeholder="Nombre del admin" required />
+          </div>
+          <div>
+            <label className="text-xs font-bold tracking-widest mb-2 block" style={{ color: 'var(--text-muted)' }}>CÓDIGO ADMIN</label>
+            <input className="input-field" type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="Contraseña" required />
+          </div>
+          {err && <p className="text-sm text-red-400">{err}</p>}
+          <button type="submit" disabled={loading} className="btn-blue">{loading ? 'Verificando...' : 'ENTRAR'}</button>
+          <button type="button" onClick={() => router.push(`/room/${code}`)} className="btn-dark text-sm">← Volver a la sala</button>
+        </form>
       </div>
     </div>
   );
@@ -196,21 +166,13 @@ function TeamsRow({ match, onSave }: {
 
 export default function AdminPage() {
   const { data: session, status } = useSession();
-  const router = useRouter();
   const params = useParams();
-  const code = (params.code as string)?.toUpperCase();
+  const code = ((params.code as string) || '').toUpperCase();
 
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('results');
-  const [activeStage, setActiveStage] = useState('group');
-
-  useEffect(() => {
-    if (status === 'unauthenticated') { router.replace('/'); return; }
-    if (status === 'authenticated' && !session.user.isAdmin) {
-      router.replace(`/room/${code}`);
-    }
-  }, [status, session, router, code]);
+  const [tab, setTab] = useState<'results' | 'teams'>('results');
+  const [stage, setStage] = useState('group');
 
   const fetchMatches = useCallback(async () => {
     const res = await fetch('/api/matches');
@@ -219,145 +181,85 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    if (status === 'authenticated' && session?.user?.isAdmin) {
-      fetchMatches();
-    }
+    if (status === 'authenticated' && session?.user?.isAdmin) fetchMatches();
+    else if (status !== 'loading') setLoading(false);
   }, [status, session, fetchMatches]);
 
-  async function handleSaveResult(matchId: number, home: number, away: number) {
-    const res = await fetch('/api/admin/results', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ matchId, homeScore: home, awayScore: away }),
-    });
-    if (!res.ok) {
-      const d = await res.json();
-      throw new Error(d.error || 'Error');
-    }
-    setMatches(prev => prev.map(m =>
-      m.id === matchId ? { ...m, home_score: home, away_score: away, is_finished: 1 } : m
-    ));
+  async function saveResult(id: number, h: number, a: number) {
+    const res = await fetch('/api/admin/results', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchId: id, homeScore: h, awayScore: a }) });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+    setMatches(p => p.map(m => m.id === id ? { ...m, home_score: h, away_score: a, is_finished: 1 } : m));
   }
 
-  async function handleSaveTeams(matchId: number, home: string, away: string) {
-    const res = await fetch('/api/admin/teams', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ matchId, homeTeam: home, awayTeam: away }),
-    });
-    if (!res.ok) {
-      const d = await res.json();
-      throw new Error(d.error || 'Error');
-    }
-    setMatches(prev => prev.map(m =>
-      m.id === matchId ? { ...m, home_team: home, away_team: away } : m
-    ));
+  async function saveTeams(id: number, h: string, a: string) {
+    const res = await fetch('/api/admin/teams', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchId: id, homeTeam: h, awayTeam: a }) });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+    setMatches(p => p.map(m => m.id === id ? { ...m, home_team: h, away_team: a } : m));
   }
 
   if (status === 'loading' || loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-amber-400 text-xl animate-pulse">Cargando...</div>
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}><span className="text-2xl animate-pulse">⚽</span></div>;
+  }
+
+  if (!session?.user?.isAdmin) {
+    return <AdminLoginForm code={code} />;
   }
 
   const stages = ['group', 'r32', 'r16', 'qf', 'sf', '3rd', 'final'];
-  const stageMatches = matches.filter(m => m.stage === activeStage);
-  const finished = matches.filter(m => m.is_finished === 1).length;
+  const stageMatches = matches.filter(m => m.stage === stage);
+  const done = matches.filter(m => m.is_finished).length;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="flex items-center gap-4 mb-6">
-        <div className="flex-1">
-          <Link href={`/room/${code}`} className="text-slate-400 hover:text-slate-200 text-sm flex items-center gap-1 mb-2">
-            ← Volver a la sala
-          </Link>
-          <h1 className="text-2xl font-bold text-amber-400">Panel de Administración</h1>
-          <p className="text-slate-400 text-sm mt-1">
-            {finished} de {matches.length} partidos con resultado cargado
-          </p>
+    <div className="min-h-screen" style={{ background: 'linear-gradient(160deg, #07131a 0%, #0d2133 50%, #07131a 100%)' }}>
+      <div className="max-w-lg mx-auto px-3 py-6">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-5">
+          <button onClick={() => window.location.href = `/room/${code}`} className="text-sm" style={{ color: 'var(--text-muted)' }}>←</button>
+          <div>
+            <h1 className="text-base font-black text-red-400 tracking-widest">PANEL ADMIN</h1>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{done}/{matches.length} resultados cargados</p>
+          </div>
         </div>
-      </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-6 border-b border-slate-700 pb-0">
-        <button
-          onClick={() => setActiveTab('results')}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-            activeTab === 'results'
-              ? 'border-amber-500 text-amber-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          ⚽ Cargar Resultados
-        </button>
-        <button
-          onClick={() => setActiveTab('teams')}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-            activeTab === 'teams'
-              ? 'border-amber-500 text-amber-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          ✏️ Configurar Equipos
-        </button>
-      </div>
-
-      {/* Stage filter */}
-      <div className="flex gap-1 overflow-x-auto pb-2 mb-6">
-        {stages.map(stage => {
-          const count = matches.filter(m => m.stage === stage).length;
-          if (count === 0) return null;
-          const doneCount = matches.filter(m => m.stage === stage && m.is_finished).length;
-          return (
-            <button
-              key={stage}
-              onClick={() => setActiveStage(stage)}
-              className={`shrink-0 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                activeStage === stage
-                  ? 'bg-amber-500 text-slate-900'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
-              }`}
-            >
-              {STAGE_LABELS[stage] ?? stage}
-              <span className="ml-1.5 text-xs opacity-70">
-                {activeTab === 'results' ? `${doneCount}/${count}` : count}
-              </span>
+        {/* Main tabs */}
+        <div className="flex rounded-xl overflow-hidden mb-4" style={{ background: '#0d2030', border: '1px solid var(--border)' }}>
+          {[['results', '⚽ Resultados'], ['teams', '✏️ Equipos']].map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id as 'results' | 'teams')}
+              className={`flex-1 py-2.5 text-xs font-bold transition-colors ${tab === id ? 'text-white' : ''}`}
+              style={tab === id ? { background: 'var(--blue)' } : { color: 'var(--text-muted)' }}>
+              {label}
             </button>
-          );
-        })}
-      </div>
+          ))}
+        </div>
 
-      {/* Content */}
-      {activeTab === 'results' ? (
-        <div className="space-y-3">
-          {stageMatches.length === 0 ? (
-            <div className="card p-8 text-center text-slate-500">
-              <p>No hay partidos en esta etapa</p>
-            </div>
-          ) : (
-            stageMatches.map(match => (
-              <ResultsRow key={match.id} match={match} onSave={handleSaveResult} />
-            ))
-          )}
+        {/* Stage filter */}
+        <div className="flex gap-1 overflow-x-auto pb-1 mb-4">
+          {stages.map(s => {
+            const c = matches.filter(m => m.stage === s).length;
+            if (!c) return null;
+            const done = matches.filter(m => m.stage === s && m.is_finished).length;
+            return (
+              <button key={s} onClick={() => setStage(s)}
+                className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${stage === s ? 'text-white' : ''}`}
+                style={stage === s ? { background: 'var(--blue)' } : { background: '#0f2030', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                {STAGE_LABELS[s]} <span style={{ opacity: 0.7 }}>{tab === 'results' ? `${done}/${c}` : c}</span>
+              </button>
+            );
+          })}
         </div>
-      ) : (
-        <div className="space-y-3">
-          <p className="text-sm text-slate-400 mb-4">
-            Actualizá los nombres de los equipos cuando se definan en la fase eliminatoria.
-          </p>
-          {stageMatches.length === 0 ? (
-            <div className="card p-8 text-center text-slate-500">
-              <p>No hay partidos en esta etapa</p>
-            </div>
-          ) : (
-            stageMatches.map(match => (
-              <TeamsRow key={match.id} match={match} onSave={handleSaveTeams} />
-            ))
-          )}
-        </div>
-      )}
+
+        {/* Content */}
+        {tab === 'results'
+          ? stageMatches.map(m => <ResultRow key={m.id} match={m} onSave={saveResult} />)
+          : <>
+              <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>Actualizá los equipos cuando se definan en la fase eliminatoria.</p>
+              {stageMatches.map(m => <TeamRow key={m.id} match={m} onSave={saveTeams} />)}
+            </>
+        }
+        {stageMatches.length === 0 && (
+          <div className="text-center py-10 text-sm" style={{ color: 'var(--text-muted)' }}>No hay partidos en esta etapa</div>
+        )}
+      </div>
     </div>
   );
 }
